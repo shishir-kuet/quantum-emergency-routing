@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qroute"
+version = "0.1.0"
+description = "Quantum-assisted emergency vehicle routing for congested urban roads (Dhaka case study)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Dell" }]
+keywords = ["quantum", "qaoa", "qubo", "routing", "osmnx", "qiskit", "dhaka"]
+
+# Runtime dependencies are declared loosely here and pinned in
+# requirements.txt. Install the pinned set first, then `pip install -e .`.
+dependencies = [
+    "numpy>=1.26,<3.0",
+    "scipy>=1.11",
+    "pandas>=2.0",
+    "networkx>=3.2",
+    "osmnx>=1.9,<3.0",
+    "qiskit>=1.2,<3.0",
+    "qiskit-aer>=0.15",
+    "PyYAML>=6.0",
+    "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+ortools = ["ortools>=9.8"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+qroute = "qroute.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: marks tests that take more than a few seconds (deselect with '-m \"not slow\"')",
+    "network: marks tests that require internet access to OpenStreetMap",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:osmnx.*",
+]
