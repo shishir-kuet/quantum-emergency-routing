@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# quantum-emergency-routing — pinned runtime dependencies
+#
+# Install (Windows PowerShell / cmd):
+#     python -m venv .venv
+#     .venv\Scripts\activate
+#     python -m pip install --upgrade pip
+#     python -m pip install -r requirements.txt
+#     python -m pip install -e .
+#
+# Python 3.10 - 3.12 recommended. Qiskit Aer wheels lag on brand-new
+# Python releases, so avoid 3.13 until you have checked wheel availability.
+# ---------------------------------------------------------------------------
+
+# --- Core scientific stack -------------------------------------------------
+numpy>=1.26,<3.0
+scipy>=1.11
+pandas>=2.0
+
+# --- Road networks ---------------------------------------------------------
+# osmnx pulls in geopandas / shapely / pyproj / rtree as transitive deps.
+# All of these ship prebuilt Windows wheels for the versions below, so plain
+# pip works: no conda and no system GDAL install required.
+networkx>=3.2
+osmnx>=1.9,<3.0
+
+# --- Quantum: Qiskit + local Aer simulator ---------------------------------
+# We build the QAOA circuit and optimisation loop by hand (see
+# qroute/quantum/) rather than leaning on qiskit-algorithms, so the only
+# Qiskit packages needed are the core SDK and the simulator.
+qiskit>=1.2,<3.0
+qiskit-aer>=0.15
+
+# --- Config, CLI, plotting -------------------------------------------------
+PyYAML>=6.0
+matplotlib>=3.8
+
+# --- Web application --------------------------------------------------------
+Flask>=3.0
+
+# --- Optional: Google OR-Tools ---------------------------------------------
+# Used as an extra classical baseline for the TSP / assignment ladder.
+# Every call site degrades gracefully when it is absent, so you may comment
+# this out if the wheel is unavailable on your platform.
+ortools>=9.8
+
+# --- Development -----------------------------------------------------------
+pytest>=8.0
