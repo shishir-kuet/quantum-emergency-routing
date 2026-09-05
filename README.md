@@ -251,8 +251,9 @@ quantum-emergency-routing/
 │   ├── 04_assignment_benchmark.py # Rung 3 p/optimizer/seed matrix
 │   ├── 05_noise_study.py       # Noiseless versus Aer noise study
 │   ├── 06_paper_figures.py     # Generate paper figures from saved results
-│   ├── 07_rung1_penalty_sweep.py # Penalty scale sweep for Rung 1
-│   ├── 08_assignment_figure.py # Generate geometry-aware assignment figure
+│   ├── 07_noise_metrics.py     # Analyze noise study results and generate noise metrics figures
+│   ├── 08_rung1_penalty_sweep.py # Penalty scale sweep for Rung 1
+│   ├── 09_assignment_figure.py # Generate geometry-aware assignment figure
 │   └── interactive_routing.py  # Interactive routing script
 ├── src/qroute/
 │   ├── classical/             # Classical solvers (Dijkstra, annealing, bruteforce)
@@ -295,6 +296,9 @@ The project generates several types of figures for analysis and publication:
 9. **Assignment Quality** (`figure_09_assignment_quality.png`): Solver comparison for assignment problem
 10. **Assignment p(opt)** (`figure_10_assignment_popt.png`): QAOA sampling reliability for assignment
 11. **Noise Impact** (`figure_11_noise_impact.png`): Noise model impact on QAOA objective
+12. **Noise Probability** (`figure_12_noise_probability.png`): Optimal-solution probability under noise
+13. **Noise Feasibility** (`figure_13_noise_feasibility.png`): Feasibility rate under noise
+14. **Noise Metrics Summary** (`figure_14_noise_metrics_summary.png`): Combined noise performance metrics
 
 ### Figure Generation
 
@@ -309,6 +313,34 @@ This script:
 - Generates publication-quality figures (300 DPI)
 - Creates CSV summaries for statistical analysis
 - Writes a `figure_manifest.json` documenting data sources
+
+### Noise Study
+
+Run the QAOA noise sensitivity study:
+
+```bash
+python scripts/05_noise_study.py
+```
+
+This script:
+- Compares noiseless and noisy QAOA execution using Qiskit Aer
+- Uses depolarizing noise (5% single-qubit, 10% two-qubit) and thermal relaxation
+- Runs multiple independent seeds for statistical significance
+- Saves results to `results/assignment_noise_study.json`
+
+### Noise Metrics Analysis
+
+Analyze noise study results and generate noise-specific figures:
+
+```bash
+python scripts/07_noise_metrics.py
+```
+
+This script:
+- Loads noise study results from `results/assignment_noise_study.json`
+- Computes mean ± standard deviation across independent seeds
+- Generates figures for optimal-solution probability, feasibility rate, and combined metrics
+- Saves aggregated summary to `results/noise_metrics_summary.json`
 
 ### Interactive Routing
 
