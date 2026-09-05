@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Emergency Routing System | QAOA Optimization</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --accent: #06b6d4;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --dark: #1e293b;
+            --light: #f8fafc;
+            --gray: #64748b;
+            --border: #e2e8f0;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --shadow-lg: rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            color: var(--dark);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .app-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 4px 6px -1px var(--shadow);
+        }
+
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+        }
+
+        .logo-text h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+            line-height: 1.2;
+        }
+
+        .logo-text p {
+            font-size: 0.875rem;
+            color: var(--gray);
+            margin: 0;
+            font-weight: 500;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .header-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: white;
+            color: var(--dark);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-btn:hover {
+            background: var(--light);
+            border-color: var(--primary);
+        }
+
+        /* Main Content */
+        .main-content {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 0;
+            min-height: calc(100vh - 80px);
+        }
+
+        /* Sidebar */
+        .sidebar {
+            background: white;
+            padding: 2rem;
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            max-height: calc(100vh - 80px);
+        }
+
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+
+        .sidebar-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title i {
+            color: var(--primary);
+        }
+
+        .control-card {
+            background: var(--light);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 0.75rem;
+        }
+
+        .control-select {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-family: inherit;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .checkbox-wrapper:hover {
+            border-color: var(--primary);
+        }
+
+        .checkbox-wrapper input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .checkbox-wrapper label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--dark);
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            box-shadow: 0 4px 6px -1px var(--shadow);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 12px -2px var(--shadow-lg);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-primary i {
+            font-size: 1rem;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            margin-top: 1rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress-bar.show {
+            display: block;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .progress-text {
+            font-size: 0.75rem;
+            color: var(--gray);
+            margin-top: 0.5rem;
+            text-align: center;
+            display: none;
+        }
+
+        .progress-text.show {
+            display: block;
+        }
+
+        /* Status Messages */
+        .status-message {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+            display: none;
+            font-size: 0.875rem;
+            border-left: 4px solid;
+        }
+
+        .status-message.show {
+            display: block;
+        }
+
+        .status-message.info {
+            background: #eff6ff;
+            border-color: var(--primary);
+            color: #1e40af;
+        }
+
+        .status-message.success {
+            background: #f0fdf4;
+            border-color: var(--success);
+            color: #166534;
+        }
+
+        .status-message.error {
+            background: #fef2f2;
+            border-color: var(--error);
+            color: #991b1b;
+        }
+
+        .status-message i {
+            margin-right: 0.5rem;
+        }
+
+        /* Instructions */
+        .instructions {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 1px solid #bae6fd;
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .instructions h3 {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .instructions li {
+            font-size: 0.875rem;
+            color: var(--gray);
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .instructions li:before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        /* Map Container */
+        .map-container {
+            position: relative;
+            background: var(--light);
+        }
+
+        #map {
+            height: calc(100vh - 80px);
+            width: 100%;
+        }
+
+        /* Results Panel */
+        .results-panel {
+            background: white;
+            border-top: 1px solid var(--border);
+            padding: 2rem;
+            display: none;
+            animation: slideUp 0.3s ease;
+        }
+
+        .results-panel.show {
+            display: block;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .results-header h2 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin: 0;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .result-card {
+            background: var(--light);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: all 0.2s;
+        }
+
+        .result-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 6px -1px var(--shadow);
+        }
+
+        .result-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .result-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+        }
+
+        .result-card-icon.classical {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .result-card-icon.quantum {
+            background: #f3e8ff;
+            color: #7c3aed;
+        }
+
+        .result-card-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--gray);
+        }
+
+        .result-card-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .result-card-unit {
+            font-size: 0.875rem;
+            color: var(--gray);
+            font-weight: 500;
+        }
+
+        /* Figures Section */
+        .figures-section {
+            margin-top: 2rem;
+        }
+
+        .figures-section h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 1rem;
+        }
+
+        .candidate-paths-panel {
+            background: var(--light);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .candidate-path-row {
+            padding: 0.55rem 0.75rem;
+            border-top: 1px solid var(--border);
+            color: var(--gray);
+            font-size: 0.85rem;
+            font-family: Consolas, "Courier New", monospace;
+        }
+
+        .candidate-path-row.optimum {
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        .figure-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .figure-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .figure-card:hover {
+            box-shadow: 0 8px 16px -4px var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .figure-image {
+            width: 100%;
+            height: auto;
+            max-height: 400px;
+            object-fit: contain;
+            background: var(--light);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .figure-info {
+            padding: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .figure-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin-bottom: 0.5rem;
+            word-break: break-all;
+        }
+
+        .figure-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .figure-btn {
+            flex: 1;
+            padding: 0.5rem;
+            background: var(--light);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--dark);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        .figure-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* Custom Markers */
+        .custom-marker {
+            background: white;
+            border: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            box-shadow: 0 2px 4px var(--shadow);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                max-height: none;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+
+            #map {
+                height: 400px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+
+            .logo-text h1 {
+                font-size: 1.25rem;
+            }
+
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .figure-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <i class="fas fa-route"></i>
+                    </div>
+                    <div class="logo-text">
+                        <h1>Quantum Emergency Routing</h1>
+                        <p>QAOA-based optimization for Dhaka city</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="header-btn">
+                        <i class="fas fa-info-circle"></i>
+                        About
+                    </button>
+                    <button class="header-btn">
+                        <i class="fas fa-cog"></i>
+                        Settings
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <aside class="sidebar">
+                <div class="sidebar-section">
+                    <div class="section-title">
+                        <i class="fas fa-map-marker-alt"></i>
+                        Area Selection
+                    </div>
+                    <div class="control-card">
+                        <label class="control-label" for="area-select">Select Dhaka Area</label>
+                        <select class="control-select" id="area-select">
+                            {% for area_key, area in areas.items() %}
+                            <option value="{{ area_key }}">{{ area.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="section-title">
+                        <i class="fas fa-sliders-h"></i>
+                        Algorithm Settings
+                    </div>
+                    <div class="control-card">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="use-qaoa" checked>
+                            <label for="use-qaoa">Enable QAOA (Quantum Algorithm)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="section-title">
+                        <i class="fas fa-play"></i>
+                        Route Computation
+                    </div>
+                    <button class="btn-primary" id="compute-btn" disabled>
+                        <i class="fas fa-calculator"></i>
+                        Compute Optimal Route
+                    </button>
+                    <div class="progress-container">
+                        <div class="progress-bar" id="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">0%</div>
+                    </div>
+                    <div class="status-message" id="status-message"></div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="section-title">
+                        <i class="fas fa-question-circle"></i>
+                        How to Use
+                    </div>
+                    <div class="instructions">
+                        <h3><i class="fas fa-lightbulb"></i> Quick Guide</h3>
+                        <ul>
+                            <li>Select a Dhaka area from dropdown</li>
+                            <li>Click on map to set origin point</li>
+                            <li>Click again to set destination</li>
+                            <li>Click "Compute Optimal Route"</li>
+                            <li>View results and generated figures</li>
+                        </ul>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+
+        <div class="results-panel" id="results-panel">
+            <div class="results-header">
+                <h2><i class="fas fa-chart-bar"></i> Route Analysis Results</h2>
+            </div>
+            
+            <div class="results-grid">
+                <div class="result-card">
+                    <div class="result-card-header">
+                        <div class="result-card-icon classical"><i class="fas fa-layer-group"></i></div>
+                        <div class="result-card-title">Optimization Scope</div>
+                    </div>
+                    <div class="result-card-value" id="optimization-scope">-</div>
+                    <div class="result-card-unit" id="candidate-generation">-</div>
+                </div>
+                <div class="result-card">
+                    <div class="result-card-header">
+                        <div class="result-card-icon classical">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <div class="result-card-title">Classical (Dijkstra)</div>
+                    </div>
+                    <div class="result-card-value" id="dijkstra-result">-</div>
+                    <div class="result-card-unit">route objective (seconds)</div>
+                </div>
+                
+                <div class="result-card">
+                    <div class="result-card-header">
+                        <div class="result-card-icon classical">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <div class="result-card-title">Classical (Annealing)</div>
+                    </div>
+                    <div class="result-card-value" id="annealing-result">-</div>
+                    <div class="result-card-unit">route objective (seconds)</div>
+                </div>
+                
+                <div class="result-card">
+                    <div class="result-card-header">
+                        <div class="result-card-icon quantum">
+                            <i class="fas fa-atom"></i>
+                        </div>
+                        <div class="result-card-title">Quantum (QAOA)</div>
+                    </div>
+                    <div class="result-card-value" id="qaoa-result">-</div>
+                    <div class="result-card-unit">route objective (seconds)</div>
+                </div>
+
+                <div class="result-card">
+                    <div class="result-card-header">
+                        <div class="result-card-icon classical">
+                            <i class="fas fa-road"></i>
+                        </div>
+                        <div class="result-card-title">Best Candidate Route</div>
+                    </div>
+                    <div class="result-card-value" id="candidate-result">-</div>
+                    <div class="result-card-unit">candidate objective (seconds)</div>
+                </div>
+            </div>
+
+            <div class="figures-section">
+                <div class="candidate-paths-panel" id="research-metrics-panel">
+                    <h3><i class="fas fa-flask"></i> Research Metrics</h3>
+                    <div id="research-metrics-list"></div>
+                </div>
+                <div class="candidate-paths-panel" id="candidate-paths-panel">
+                    <h3><i class="fas fa-list-ol"></i> Candidate Path Costs</h3>
+                    <div id="candidate-paths-list"></div>
+                </div>
+                <div class="candidate-paths-panel" id="qaoa-states-panel">
+                    <h3><i class="fas fa-atom"></i> Top QAOA Sampled States</h3>
+                    <div id="qaoa-states-list"></div>
+                </div>
+                <h3><i class="fas fa-images"></i> Generated Analysis Figures</h3>
+                <div class="figure-grid" id="figure-grid">
+                    <!-- Figures will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map centered on Dhaka
+        const map = L.map('map').setView([23.8103, 90.4125], 12);
+
+        // Add OpenStreetMap tiles with better styling
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Area coordinates for map bounds
+        const areaBounds = {
+            dhanmondi: [[23.7350, 90.3650], [23.7580, 90.3900]],
+            motijheel: [[23.7150, 90.4050], [23.7320, 90.4250]],
+            farmgate: [[23.7650, 90.3750], [23.7820, 90.3950]],
+            gulistan: [[23.7000, 90.3950], [23.7150, 90.4150]],
+            gulshan: [[23.7750, 90.3950], [23.8000, 90.4250]]
+        };
+
+        // State
+        let originMarker = null;
+        let destMarker = null;
+        let routeLayers = [];
+
+        // DOM elements
+        const areaSelect = document.getElementById('area-select');
+        const computeBtn = document.getElementById('compute-btn');
+        const useQaoaCheckbox = document.getElementById('use-qaoa');
+        const progressBar = document.getElementById('progress-bar');
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+        const statusMessage = document.getElementById('status-message');
+        const resultsPanel = document.getElementById('results-panel');
+
+        // Update map bounds when area changes
+        areaSelect.addEventListener('change', function() {
+            const area = this.value;
+            if (areaBounds[area]) {
+                map.fitBounds(areaBounds[area]);
+                clearMarkers();
+                computeBtn.disabled = true;
+            }
+        });
+
+        function clearMarkers() {
+            if (originMarker) map.removeLayer(originMarker);
+            if (destMarker) map.removeLayer(destMarker);
+            routeLayers.forEach(layer => map.removeLayer(layer));
+            originMarker = null;
+            destMarker = null;
+            routeLayers = [];
+        }
+
+        // Map click handler
+        map.on('click', function(e) {
+            if (!originMarker) {
+                originMarker = L.marker(e.latlng, {
+                    icon: L.divIcon({
+                        className: 'custom-marker',
+                        html: '<i class="fas fa-home"></i>',
+                        iconSize: [30, 30]
+                    })
+                }).addTo(map);
+                showStatus('Origin point set. Click to set destination.', 'info');
+            } else if (!destMarker) {
+                destMarker = L.marker(e.latlng, {
+                    icon: L.divIcon({
+                        className: 'custom-marker',
+                        html: '<i class="fas fa-flag-checkered"></i>',
+                        iconSize: [30, 30]
+                    })
+                }).addTo(map);
+                computeBtn.disabled = false;
+                showStatus('Destination set. Click "Compute Optimal Route" to begin.', 'info');
+            } else {
+                clearMarkers();
+                originMarker = L.marker(e.latlng, {
+                    icon: L.divIcon({
+                        className: 'custom-marker',
+                        html: '<i class="fas fa-home"></i>',
+                        iconSize: [30, 30]
+                    })
+                }).addTo(map);
+                showStatus('Origin reset. Click to set new destination.', 'info');
+            }
+        });
+
+        // Compute route
+        computeBtn.addEventListener('click', async function() {
+            if (!originMarker || !destMarker) return;
+
+            const area = areaSelect.value;
+            const useQaoa = useQaoaCheckbox.checked;
+
+            computeBtn.disabled = true;
+            progressBar.classList.add('show');
+            progressText.classList.add('show');
+            statusMessage.classList.add('show');
+            showStatus('Computing optimal route using QAOA algorithm...', 'info');
+            updateProgress(10);
+
+            try {
+                const progressInterval = setInterval(() => {
+                    const currentProgress = parseInt(progressFill.style.width) || 10;
+                    if (currentProgress < 90) {
+                        updateProgress(currentProgress + 5);
+                    }
+                }, 2000);
+
+                const response = await fetch('/api/compute_route', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        area: area,
+                        use_qaoa: useQaoa,
+                        origin: {
+                            lat: originMarker.getLatLng().lat,
+                            lng: originMarker.getLatLng().lng
+                        },
+                        destination: {
+                            lat: destMarker.getLatLng().lat,
+                            lng: destMarker.getLatLng().lng
+                        }
+                    })
+                });
+
+                clearInterval(progressInterval);
+                updateProgress(100);
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showStatus('Route computation completed successfully!', 'success');
+                    displayResults(data);
+                    
+                    drawRoutes(data.results);
+                } else {
+                    showStatus('Error: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showStatus('Error: ' + error.message, 'error');
+            } finally {
+                computeBtn.disabled = false;
+                setTimeout(() => {
+                    progressBar.classList.remove('show');
+                    progressText.classList.remove('show');
+                }, 2000);
+            }
+        });
+
+        function showStatus(message, type) {
+            statusMessage.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i> ${message}`;
+            statusMessage.className = 'status-message show ' + type;
+        }
+
+        function updateProgress(percent) {
+            progressFill.style.width = percent + '%';
+            progressText.textContent = percent + '%';
+        }
+
+        function displayResults(data) {
+            resultsPanel.classList.add('show');
+            
+            // Updated to match new API response structure
+            const dijkstraCost = data.results.dijkstra?.objective;
+            const annealingCost = data.results.annealing?.objective;
+            const qaoaCost = data.results.qaoa?.best_sampled_objective;
+            const candidateCost = data.results.candidate_cost;
+            const formulationInfo = data.formulation_info || {};
+
+            document.getElementById('optimization-scope').textContent =
+                formulationInfo.optimization_scope || 'Not reported';
+            document.getElementById('candidate-generation').textContent =
+                formulationInfo.candidate_generation || 'Not reported';
+
+            const candidatePaths = formulationInfo.candidate_paths || [];
+            const researchMetrics = document.getElementById('research-metrics-list');
+            const qaoa = data.results.qaoa || {};
+            researchMetrics.textContent = [
+                `Scope: ${formulationInfo.optimization_scope || 'Not reported'}`,
+                `Candidate generation: ${formulationInfo.candidate_generation || 'Not reported'}`,
+                `QAOA feasibility rate: ${qaoa.feasibility_rate == null ? 'N/A' : qaoa.feasibility_rate.toFixed(4)}`,
+                `QAOA p(opt): ${qaoa.p_opt == null ? 'N/A' : qaoa.p_opt.toFixed(6)}`,
+                `QAOA optimizer runtime: ${qaoa.qaoa_runtime == null ? 'N/A' : qaoa.qaoa_runtime.toFixed(3) + ' s'}`,
+                `QAOA qubits: ${qaoa.n_qubits == null ? 'N/A' : qaoa.n_qubits}`
+            ].join(' | ');
+            const candidateList = document.getElementById('candidate-paths-list');
+            candidateList.innerHTML = '';
+            if (candidatePaths.length > 0) {
+                candidatePaths.forEach((candidate, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'candidate-path-row' + (index === 0 ? ' optimum' : '');
+                    row.textContent = `Candidate ${candidate.rank}: ${candidate.path.join(' -> ')} | ${candidate.cost.toFixed(2)} s${index === 0 ? ' | candidate-space optimum' : ''}`;
+                    candidateList.appendChild(row);
+                });
+            } else {
+                candidateList.textContent = 'Candidate path costs were not reported.';
+            }
+
+            const statesList = document.getElementById('qaoa-states-list');
+            statesList.innerHTML = '';
+            const sampledStates = qaoa.top_sampled_states || [];
+            sampledStates.forEach((state, index) => {
+                const row = document.createElement('div');
+                row.className = 'candidate-path-row' + (state.feasible ? ' optimum' : '');
+                const decoded = state.route
+                    ? `route=${state.route.join(' -> ')}`
+                    : state.assignments
+                        ? `assignment=${JSON.stringify(state.assignments)}`
+                        : 'infeasible';
+                const objective = state.objective == null ? 'N/A' : state.objective.toFixed(2);
+                row.textContent = `${index + 1}. ${state.bitstring} | count=${state.count} | p=${state.probability.toFixed(4)} | ${decoded} | objective=${objective}`;
+                statesList.appendChild(row);
+            });
+            if (!sampledStates.length) {
+                statesList.textContent = 'QAOA sampled states were not reported.';
+            }
+            
+            document.getElementById('dijkstra-result').textContent = 
+                dijkstraCost !== null && dijkstraCost !== undefined ? dijkstraCost.toFixed(2) : 'N/A';
+            document.getElementById('annealing-result').textContent = 
+                annealingCost !== null && annealingCost !== undefined ? annealingCost.toFixed(2) : 'N/A';
+            document.getElementById('qaoa-result').textContent = 
+                qaoaCost !== null && qaoaCost !== undefined ? qaoaCost.toFixed(2) : 'N/A';
+            document.getElementById('candidate-result').textContent =
+                candidateCost !== null && candidateCost !== undefined ? candidateCost.toFixed(2) : 'N/A';
+
+            const figureGrid = document.getElementById('figure-grid');
+            figureGrid.innerHTML = '';
+            
+            if (data.figures && data.figures.length > 0) {
+                data.figures.forEach(figurePath => {
+                    const figureName = figurePath.split('\\').pop().split('/').pop();
+                    const webPath = '/results/' + figurePath.replace(/\\/g, '/');
+                    
+                    const figureCard = document.createElement('div');
+                    figureCard.className = 'figure-card';
+                    figureCard.innerHTML = `
+                        <img src="${webPath}" alt="${figureName}" class="figure-image">
+                        <div class="figure-info">
+                            <div class="figure-name">${figureName}</div>
+                            <div class="figure-actions">
+                                <a href="${webPath}" target="_blank" class="figure-btn">
+                                    <i class="fas fa-expand"></i> View Full
+                                </a>
+                                <a href="${webPath}" download class="figure-btn">
+                                    <i class="fas fa-download"></i> Download
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                    figureGrid.appendChild(figureCard);
+                });
+            } else {
+                figureGrid.innerHTML = '<p style="color: var(--gray); padding: 1rem;">No figures generated.</p>';
+            }
+        }
+
+        function drawRoutes(results) {
+            routeLayers.forEach(layer => map.removeLayer(layer));
+            routeLayers = [];
+
+            // Updated to match new API response structure
+            const routes = [
+                { path: results.candidate_route, color: '#111827', label: 'Best candidate route' },
+                { path: results.dijkstra?.route, color: '#f59e0b', label: 'Classical shortest path' },
+                { path: results.qaoa?.route, color: '#6366f1', label: 'QAOA best sampled feasible path' }
+            ];
+
+            routes.forEach(route => {
+                if (!route.path || route.path.length < 2) return;
+                const layer = L.polyline(route.path, {
+                    color: route.color,
+                    weight: 6,
+                    opacity: 0.9,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }).addTo(map);
+                layer.bindTooltip(route.label, {sticky: true});
+                routeLayers.push(layer);
+            });
+        }
+
+        // Initialize with default area
+        map.fitBounds(areaBounds[areaSelect.value]);
+    </script>
+</body>
+</html>
