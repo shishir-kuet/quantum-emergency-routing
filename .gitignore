@@ -28,6 +28,9 @@ data/processed/*
 
 results/*
 !results/.gitkeep
+!results/assignment_noise_study.json
+!results/noise_metrics_summary.json
+!results/paper_figures/
 
 # --- OS noise -------------------------------------------------------------
 .DS_Store
