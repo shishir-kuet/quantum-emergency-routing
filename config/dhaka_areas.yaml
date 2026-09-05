@@ -1,0 +1,54 @@
+# ===========================================================================
+# quantum-emergency-routing — Dhaka area configurations
+#
+# Multiple study areas in Dhaka city for emergency routing experiments
+# ===========================================================================
+
+areas:
+  dhanmondi:
+    name: "Dhanmondi / Kalabagan / New Market"
+    bbox:
+      north: 23.7580
+      south: 23.7350
+      east: 90.3900
+      west: 90.3650
+    description: "Residential and commercial area with educational institutions"
+
+  motijheel:
+    name: "Motijheel Commercial Area"
+    bbox:
+      north: 23.7320
+      south: 23.7150
+      east: 90.4250
+      west: 90.4050
+    description: "Central business district and commercial hub"
+
+  farmgate:
+    name: "Farmgate / Tejgaon"
+    bbox:
+      north: 23.7820
+      south: 23.7650
+      east: 90.3950
+      west: 90.3750
+    description: "Major transportation hub and government area"
+
+  gulistan:
+    name: "Gulistan / Old Dhaka"
+    bbox:
+      north: 23.7150
+      south: 23.7000
+      east: 90.4150
+      west: 90.3950
+    description: "Historic commercial center and busy market area"
+
+  gulshan:
+    name: "Gulshan / Banani Diplomatic Zone"
+    bbox:
+      north: 23.8000
+      south: 23.7750
+      east: 90.4250
+      west: 90.3950
+    description: "Upscale residential and diplomatic area"
+
+# Default area to use when none specified
+default_area: dhanmondi

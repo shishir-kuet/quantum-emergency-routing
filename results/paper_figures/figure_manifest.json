@@ -1,0 +1,14 @@
+{
+  "figure_03": "generated from results/shortest_path_p*.json",
+  "figure_05": "generated from results/shortest_path_p*.json",
+  "figure_02": "generated from saved Rung 1 route figure",
+  "figure_01": "generated from saved road-network experiment figure",
+  "figure_09": "generated from exact, SA, and QAOA benchmark columns",
+  "figure_10": "generated from results/assignment_benchmark.json",
+  "figure_06": "resource data available in assignment benchmark",
+  "figure_07": "resource data available in assignment benchmark",
+  "figure_11": "generated from results/assignment_noise_study.json",
+  "figure_04": "generated from results/shortest_path_penalty_sweep.json",
+  "figure_08": "generated from geometry-aware Rung 3 assignment figure",
+  "figure_12": "missing_data: hardware experiment not performed"
+}

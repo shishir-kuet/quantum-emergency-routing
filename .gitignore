@@ -1,0 +1,38 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- Tooling caches -------------------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- OSMnx HTTP response cache -------------------------------------------
+cache/
+
+# --- Project data & results ----------------------------------------------
+# Road-network downloads and experiment outputs are reproducible artefacts:
+# regenerate them with the pipeline instead of committing them.
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+results/*
+!results/.gitkeep
+!results/assignment_noise_study.json
+!results/noise_metrics_summary.json
+!results/paper_figures/
+
+# --- OS noise -------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini

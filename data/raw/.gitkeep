@@ -1,0 +1,2 @@
+# Downloaded OpenStreetMap graphs land here (see qroute/data/fetch.py).
+# Tracked only so the directory exists in a fresh clone.
