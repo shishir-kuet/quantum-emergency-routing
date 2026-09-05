@@ -1,0 +1,73 @@
+# ===========================================================================
+# quantum-emergency-routing — default configuration
+#
+# Every value here has a matching default in qroute/config.py, so this file
+# is a pure override layer. Copy it (e.g. config/experiment_a.yaml), edit,
+# and pass it with `--config config/experiment_a.yaml`.
+# ===========================================================================
+
+project:
+  name: quantum-emergency-routing
+  seed: 42
+  log_level: INFO
+
+data:
+  # ---------------------------------------------------------------------
+  # Study area: a ~2.5 x 2.5 km window over Dhanmondi / Kalabagan / New
+  # Market in Dhaka. Small enough to download in seconds and to keep the
+  # drivable graph in the low hundreds of nodes, which is what makes the
+  # quantum-scale sub-instances tractable.
+  #
+  # To move the study area, edit these four numbers. Keep the window small:
+  # QAOA qubit counts grow as O(n^2) in the number of instance nodes.
+  # ---------------------------------------------------------------------
+  bbox:
+    north: 23.7580
+    south: 23.7350
+    east: 90.3900
+    west: 90.3650
+
+  network_type: drive        # drive | drive_service | bike | walk | all
+  simplify: true             # collapse interstitial nodes into edges
+  consolidate_tolerance_m: 0 # >0 merges nearby intersections (metres); 0 = off
+  default_speed_kph: 20.0    # fallback speed for edges with no maxspeed tag
+
+  raw_dir: data/raw
+  processed_dir: data/processed
+  graph_filename: dhaka_dhanmondi_drive.graphml
+
+instance:
+  # A "quantum-scale" sub-instance carved out of the full road graph.
+  n_nodes: 5                 # locations in the tour ladder (TSP)
+  n_incidents: 3             # incident sites for the assignment ladder
+  n_ambulances: 2            # vehicles for the assignment ladder
+  sampling: betweenness      # random | betweenness | degree | farthest
+  weight: travel_time        # travel_time (seconds) | length (metres)
+
+qubo:
+  # Constraint penalties are set to penalty_scale x (max objective
+  # coefficient), which is the standard safe heuristic: large enough that
+  # violating a constraint can never pay off, small enough to keep the
+  # spectral gap workable.
+  penalty_scale: 2.0
+  normalise: true            # scale Q so coefficients sit in a sane range
+
+qaoa:
+  reps: 5                    # QAOA depth p (increased for better optimization)
+  optimizer: COBYLA          # COBYLA | POWELL | NELDER-MEAD | SPSA
+  maxiter: 200               # Increased for better convergence
+  shots: 2048                # Increased for better sampling
+  initial_point: null        # null = deterministic ramp schedule
+  seed_simulator: 42
+
+backend:
+  provider: aer              # aer (local simulator) — hardware comes later
+  method: matrix_product_state  # Faster for larger qubit counts
+  noise_model: null          # null = ideal simulation
+  optimization_level: 3      # transpiler effort
+  max_parallel_threads: 0    # 0 = let Aer decide
+
+output:
+  results_dir: results
+  figures_dir: results/figures
+  save_figures: true
