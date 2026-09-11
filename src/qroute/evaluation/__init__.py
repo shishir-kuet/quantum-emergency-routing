@@ -43,6 +43,14 @@ from .metrics import (
     time_to_solution,
 )
 
+from .near_optimal_metrics import (
+    DEFAULT_TOLERANCES,
+    classify_near_optimal_samples,
+    compute_near_optimal_probabilities,
+    compute_exact_optimal_probability,
+    extended_sample_statistics,
+)
+
 __all__ = [
     # metrics
     "SampleStatistics",
@@ -56,6 +64,12 @@ __all__ = [
     "compare_results",
     "comparison_table",
     "DEFAULT_TOLERANCE",
+    # near-optimal metrics
+    "DEFAULT_TOLERANCES",
+    "classify_near_optimal_samples",
+    "compute_near_optimal_probabilities",
+    "compute_exact_optimal_probability",
+    "extended_sample_statistics",
     # circuit_stats
     "CircuitStats",
     "circuit_stats",

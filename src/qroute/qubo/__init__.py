@@ -27,7 +27,12 @@ from typing import Any, Optional, Union
 from ..config import Config
 from ..data.instance import RoutingInstance
 from ..exceptions import FormulationError
-from .assignment import VEHICLE_MODES, AssignmentFormulation
+
+from .assignment import (
+    VEHICLE_MODES,
+    AssignmentFormulation,
+)
+
 from .base import (
     Formulation,
     RouteSolution,
@@ -35,42 +40,93 @@ from .base import (
     get_formulation_class,
     register,
 )
-from .ising import IsingModel, ising_to_qubo, qubo_to_ising
-from .matrix import QUBO, QUBOBuilder, array_to_bitstring, bitstring_to_array
+
+from .ising import (
+    IsingModel,
+    ising_to_qubo,
+    qubo_to_ising,
+)
+
+from .matrix import (
+    QUBO,
+    QUBOBuilder,
+    array_to_bitstring,
+    bitstring_to_array,
+)
+
 from .shortest_path import (
     PathProblem,
     ShortestPathFormulation,
     build_local_path_problem,
     build_path_problem,
 )
+
 from .tsp import TSPFormulation
 
+
+# ---------------------------------------------------------------------------
+# Compatibility aliases
+# ---------------------------------------------------------------------------
+#
+# Some parts of the pipeline use the older/shorter solver-facing name
+# ``AssignmentQUBO``. The actual formulation class is
+# ``AssignmentFormulation``. Keep both names available without duplicating
+# or changing the implementation.
+#
+AssignmentQUBO = AssignmentFormulation
+
+
 __all__ = [
-    # containers
+    # -----------------------------------------------------------------------
+    # Containers
+    # -----------------------------------------------------------------------
     "QUBO",
     "QUBOBuilder",
     "IsingModel",
     "RouteSolution",
-    # conversions
+
+    # -----------------------------------------------------------------------
+    # Conversions
+    # -----------------------------------------------------------------------
     "qubo_to_ising",
     "ising_to_qubo",
     "bitstring_to_array",
     "array_to_bitstring",
-    # formulation framework
+
+    # -----------------------------------------------------------------------
+    # Formulation framework
+    # -----------------------------------------------------------------------
     "Formulation",
     "register",
     "available_formulations",
     "get_formulation_class",
     "build_formulation",
-    # the three rungs
+
+    # -----------------------------------------------------------------------
+    # Rung 1 -- Shortest path
+    # -----------------------------------------------------------------------
     "ShortestPathFormulation",
-    "TSPFormulation",
-    "AssignmentFormulation",
     "PathProblem",
     "build_path_problem",
     "build_local_path_problem",
+
+    # -----------------------------------------------------------------------
+    # Rung 2 -- TSP
+    # -----------------------------------------------------------------------
+    "TSPFormulation",
+
+    # -----------------------------------------------------------------------
+    # Rung 3 -- Assignment
+    # -----------------------------------------------------------------------
+    "AssignmentFormulation",
+    "AssignmentQUBO",
     "VEHICLE_MODES",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Expected input types for each formulation
+# ---------------------------------------------------------------------------
 
 #: Which problem container each formulation expects as its first argument.
 _EXPECTED_INPUT = {
@@ -81,6 +137,10 @@ _EXPECTED_INPUT = {
 
 ProblemLike = Union[PathProblem, RoutingInstance]
 
+
+# ---------------------------------------------------------------------------
+# Formulation factory
+# ---------------------------------------------------------------------------
 
 def build_formulation(
     name: str,
@@ -99,12 +159,16 @@ def build_formulation(
     ----------
     name:
         A key from :func:`available_formulations`, e.g. ``"tsp"``.
+
     problem:
-        A :class:`~qroute.qubo.shortest_path.PathProblem` for ``"shortest_path"``,
-        or a :class:`~qroute.data.instance.RoutingInstance` for the other two.
+        A :class:`~qroute.qubo.shortest_path.PathProblem` for
+        ``"shortest_path"``, or a :class:`~qroute.data.instance.RoutingInstance`
+        for the other two.
+
     config:
         When given, penalty and normalisation settings are taken from
         ``config.qubo`` via the class's ``from_config`` hook.
+
     **overrides:
         Passed through to the constructor, taking precedence over *config*.
 
@@ -113,9 +177,11 @@ def build_formulation(
     >>> sorted(available_formulations())
     ['assignment', 'local_routing', 'shortest_path', 'tsp']
     """
+
     cls = get_formulation_class(name)
 
     expected = _EXPECTED_INPUT.get(name)
+
     if expected is not None and not isinstance(problem, expected):
         raise FormulationError(
             f"Formulation '{name}' expects a {expected.__name__}, got "
@@ -124,6 +190,15 @@ def build_formulation(
 
     if config is not None:
         from_config = getattr(cls, "from_config", None)
+
         if from_config is not None:
-            return from_config(problem, config, **overrides)
-    return cls(problem, **overrides)  # type: ignore[arg-type]
+            return from_config(
+                problem,
+                config,
+                **overrides,
+            )
+
+    return cls(
+        problem,
+        **overrides,
+    )  # type: ignore[arg-type]

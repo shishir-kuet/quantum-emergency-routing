@@ -1,33 +1,24 @@
-r"""Metrics for comparing a quantum result against a classical one honestly.
+"""
+Metrics for comparing quantum results against classical references honestly.
 
-Most of the effort in this module goes into refusing to compute numbers that
-would be misleading. Three traps in particular:
+The module separates three concepts:
 
-**An approximation ratio needs a provable optimum.** Dividing by a heuristic's
-answer produces a number that looks like a ratio and means nothing -- and it can
-exceed 1, which is how you discover the denominator was wrong. Every function
-here demands ``optimal=True`` on its reference, or refuses.
+1. Original-problem reference
+   - Example: Dijkstra for shortest path.
+   - Used as the scientifically valid optimum/reference.
 
-**QAOA's mean energy is not its answer.** The variational objective is the mean
-(or CVaR) energy; the *result* is the best feasible sample. Reporting the mean as
-the solution quality understates QAOA badly; reporting the best sample without
-also reporting how rare it was overstates it just as badly. Hence
-:func:`success_probability` alongside :func:`approximation_ratio`.
+2. QUBO-level classical baselines
+   - Brute force over the QUBO.
+   - Simulated annealing over the QUBO.
 
-**Feasibility is a first-class outcome.** On penalty-encoded constrained
-problems most of the Hilbert space is invalid routes. A run where 2% of shots are
-feasible and one of them is optimal is a very different result from one where 90%
-are feasible and none is optimal, and a single "cost" column hides that
-completely.
+3. QAOA measurement distribution
+   - Feasibility.
+   - Best feasible sampled objective.
+   - Exact/near-optimal probabilities.
+   - Time-to-solution.
 
-Timing
-------
-:func:`time_to_solution` is the fairest single-number comparison available on a
-simulator, but it is still not a claim about hardware. Simulating :math:`n`
-qubits costs :math:`O(2^n)` classically, so a simulator's wall-clock time says
-nothing about what a device would take. Treat these numbers as a check that the
-classical baseline was run competently, not as evidence of quantum advantage --
-and say so in any write-up.
+Approximation ratios are computed only when the supplied reference is
+explicitly marked as provably optimal.
 """
 
 from __future__ import annotations
@@ -58,126 +49,219 @@ __all__ = [
 
 _LOG = get_logger(__name__)
 
-#: Costs within this relative distance of the optimum count as "optimal found".
 DEFAULT_TOLERANCE = 1e-6
 
 
-# ---------------------------------------------------------------------------
-# Ratios and gaps
-# ---------------------------------------------------------------------------
+# ============================================================================
+# RATIOS AND GAPS
+# ============================================================================
+
 def approximation_ratio(
     achieved: Optional[float],
     reference: float,
     *,
     reference_is_optimal: bool = True,
 ) -> Optional[float]:
-    """``reference / achieved`` for a minimisation problem.
-
-    Returns a number in :math:`(0, 1]` where **1.0 means optimal** and smaller is
-    worse, which is the orientation used throughout the QAOA literature. Returns
-    ``None`` when *achieved* is ``None`` (nothing feasible was found) -- that is a
-    real result and should be reported as "no feasible solution", not as a ratio
-    of zero.
-
-    >>> approximation_ratio(120.0, 100.0)
-    0.8333333333333334
-    >>> approximation_ratio(None, 100.0) is None
-    True
     """
+    Return the minimisation approximation ratio.
+
+    ratio = reference / achieved
+
+    A value of 1.0 means the achieved solution matches the optimum.
+
+    The ratio is only valid when ``reference_is_optimal=True``.
+    """
+
     if not reference_is_optimal:
         raise QRouteError(
-            "Refusing to compute an approximation ratio against a non-optimal "
-            "reference. Use optimality_gap() with an explicit note, or solve the "
-            "instance exactly first (classical.bruteforce / classical.tsp with "
-            "method='bruteforce')."
+            "Refusing to compute an approximation ratio against a "
+            "non-optimal reference."
         )
+
     if achieved is None:
         return None
+
     if reference <= 0:
         raise QRouteError(
-            f"Reference cost must be positive to form a ratio, got {reference}. "
-            f"A zero-cost optimum means the instance is degenerate."
+            f"Reference cost must be positive, got {reference}."
         )
+
     if achieved <= 0:
         raise QRouteError(
-            f"Achieved cost {achieved} is non-positive, which is impossible for a "
-            f"travel-time objective -- check the decode path"
+            f"Achieved cost must be positive, got {achieved}."
         )
+
     return float(reference) / float(achieved)
 
 
-def optimality_gap(achieved: Optional[float], reference: float) -> Optional[float]:
-    """Excess cost over *reference*, as a percentage.
-
-    ``0.0`` means the reference cost was matched, ``25.0`` means a quarter more
-    expensive. Unlike :func:`approximation_ratio` this makes no claim that the
-    reference is optimal, so it is the right function for "how far off the
-    heuristic is the quantum answer".
+def optimality_gap(
+    achieved: Optional[float],
+    reference: float,
+) -> Optional[float]:
     """
+    Return excess cost over the reference as a percentage.
+
+    gap = (achieved - reference) / reference * 100
+
+    0% means the achieved objective matches the reference.
+    """
+
     if achieved is None:
         return None
+
     if reference <= 0:
-        raise QRouteError(f"Reference cost must be positive, got {reference}")
-    return 100.0 * (float(achieved) - float(reference)) / float(reference)
+        raise QRouteError(
+            f"Reference cost must be positive, got {reference}."
+        )
+
+    return (
+        100.0
+        * (float(achieved) - float(reference))
+        / float(reference)
+    )
 
 
-# ---------------------------------------------------------------------------
-# Shot-level analysis
-# ---------------------------------------------------------------------------
+# ============================================================================
+# SHOT-LEVEL ANALYSIS
+# ============================================================================
+
 @dataclass(frozen=True, eq=False)
 class SampleStatistics:
-    """What a measured distribution actually contains.
-
-    Decoding every distinct outcome is affordable because counts collapse
-    duplicates: 4096 shots of a 20-qubit circuit typically yield a few thousand
-    unique strings at most, and far fewer once the optimiser has concentrated the
-    distribution.
+    """
+    Summary of the complete QAOA measurement distribution.
     """
 
     n_shots: int
     n_unique: int
     feasible_shots: int
     optimal_shots: int
+
     mean_energy: float
     best_energy: float
+
     best_solution: Optional[RouteSolution]
     best_feasible_objective: Optional[float]
+
     feasible_objectives: Tuple[float, ...] = ()
-    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    near_optimal_shots_1pct: int = 0
+    near_optimal_shots_2pct: int = 0
+    near_optimal_shots_5pct: int = 0
+    near_optimal_shots_10pct: int = 0
+
+    metadata: Dict[str, Any] = field(
+        default_factory=dict
+    )
 
     @property
     def feasibility_rate(self) -> float:
-        """Fraction of shots that decoded to a valid route."""
-        return self.feasible_shots / self.n_shots if self.n_shots else 0.0
+        """Fraction of all shots that produced feasible solutions."""
+
+        if self.n_shots == 0:
+            return 0.0
+
+        return (
+            self.feasible_shots
+            / self.n_shots
+        )
 
     @property
     def success_probability(self) -> Optional[float]:
-        """Fraction of shots that hit the optimum, if an optimum was supplied.
-
-        This is the number that decides whether a QAOA run is *useful*. A
-        best-sample cost equal to the optimum with a success probability of
-        1/4096 means the circuit is barely better than random guessing at this
-        size; the same cost at 0.3 means the distribution genuinely concentrated.
         """
-        if self.metadata.get("reference_objective") is None:
+        Fraction of shots that hit the supplied optimum.
+
+        Returns None when no reference optimum was supplied.
+        """
+
+        if self.metadata.get(
+            "reference_objective"
+        ) is None:
             return None
-        return self.optimal_shots / self.n_shots if self.n_shots else 0.0
+
+        if self.n_shots == 0:
+            return 0.0
+
+        return (
+            self.optimal_shots
+            / self.n_shots
+        )
 
     @property
     def mean_feasible_objective(self) -> Optional[float]:
+        """Mean objective among feasible shots."""
+
         if not self.feasible_objectives:
             return None
-        return float(np.mean(self.feasible_objectives))
+
+        return float(
+            np.mean(
+                self.feasible_objectives
+            )
+        )
+
+    @property
+    def near_optimal_probability_1pct(self) -> float:
+        return (
+            self.near_optimal_shots_1pct
+            / self.n_shots
+            if self.n_shots
+            else 0.0
+        )
+
+    @property
+    def near_optimal_probability_2pct(self) -> float:
+        return (
+            self.near_optimal_shots_2pct
+            / self.n_shots
+            if self.n_shots
+            else 0.0
+        )
+
+    @property
+    def near_optimal_probability_5pct(self) -> float:
+        return (
+            self.near_optimal_shots_5pct
+            / self.n_shots
+            if self.n_shots
+            else 0.0
+        )
+
+    @property
+    def near_optimal_probability_10pct(self) -> float:
+        return (
+            self.near_optimal_shots_10pct
+            / self.n_shots
+            if self.n_shots
+            else 0.0
+        )
 
     def describe(self) -> str:
+        """Human-readable summary."""
+
         success = self.success_probability
-        success_text = "n/a" if success is None else f"{success:.4f}"
+
+        success_text = (
+            "n/a"
+            if success is None
+            else f"{success:.4f}"
+        )
+
         best = self.best_feasible_objective
-        best_text = "none" if best is None else f"{best:.2f}"
+
+        best_text = (
+            "none"
+            if best is None
+            else f"{best:.2f}"
+        )
+
         return (
-            f"SampleStatistics(shots={self.n_shots}, unique={self.n_unique}, "
-            f"feasible={self.feasibility_rate:.3f}, p(optimal)={success_text}, "
-            f"best feasible cost={best_text}, <E>={self.mean_energy:.4g})"
+            f"SampleStatistics("
+            f"shots={self.n_shots}, "
+            f"unique={self.n_unique}, "
+            f"feasible={self.feasibility_rate:.3f}, "
+            f"p(optimal)={success_text}, "
+            f"best feasible cost={best_text}, "
+            f"<E>={self.mean_energy:.4g})"
         )
 
 
@@ -189,82 +273,240 @@ def analyse_counts(
     tolerance: float = DEFAULT_TOLERANCE,
     max_unique: int = 200_000,
 ) -> SampleStatistics:
-    """Decode every distinct outcome in *counts* and summarise the distribution.
+    """
+    Decode every distinct QAOA outcome and analyse the full distribution.
 
     Parameters
     ----------
+    counts:
+        QAOA measurement counts.
+
+    formulation:
+        QUBO formulation used to decode the states.
+
     reference_objective:
-        The optimal route cost, if known. Supplying it enables
-        :attr:`SampleStatistics.success_probability`; omitting it leaves that
-        ``None`` rather than silently comparing against the best sample (which
-        would always give 100% and mean nothing).
+        Known optimal objective. If supplied, exact and near-optimal
+        probabilities are computed.
+
     tolerance:
-        Relative tolerance for "equals the optimum".
+        Relative/absolute tolerance for exact-optimal classification.
+
+    max_unique:
+        Safety limit on the number of distinct bitstrings decoded.
     """
+
     if not counts:
-        raise QRouteError("Cannot analyse an empty counts dictionary")
+        raise QRouteError(
+            "Cannot analyse an empty counts dictionary."
+        )
+
     if len(counts) > max_unique:
         raise QRouteError(
-            f"{len(counts):,} distinct outcomes exceeds the {max_unique:,} decode "
-            f"limit; reduce shots or raise max_unique deliberately"
+            f"{len(counts):,} distinct outcomes exceeds "
+            f"the {max_unique:,} decode limit."
         )
 
     qubo = formulation.qubo()
-    assignments, energies, weights = sample_energies(dict(counts), qubo)
 
-    n_shots = int(weights.sum())
-    feasible_shots = 0
-    optimal_shots = 0
-    best_energy = float(energies.min())
-    best_solution: Optional[RouteSolution] = None
-    best_objective: Optional[float] = None
-    feasible_objectives: List[float] = []
-
-    threshold = (
-        None
-        if reference_objective is None
-        else float(reference_objective) * (1.0 + tolerance) + tolerance
+    assignments, energies, weights = sample_energies(
+        dict(counts),
+        qubo,
     )
 
-    for row in range(assignments.shape[0]):
-        shots = int(weights[row])
-        solution = formulation.decode(assignments[row], qiskit_order=False)
+    n_shots = int(
+        weights.sum()
+    )
+
+    if n_shots <= 0:
+        raise QRouteError(
+            "Counts contain no positive shots."
+        )
+
+    feasible_shots = 0
+    optimal_shots = 0
+
+    near_optimal_shots_1pct = 0
+    near_optimal_shots_2pct = 0
+    near_optimal_shots_5pct = 0
+    near_optimal_shots_10pct = 0
+
+    best_energy = float(
+        energies.min()
+    )
+
+    best_solution: Optional[
+        RouteSolution
+    ] = None
+
+    best_objective: Optional[
+        float
+    ] = None
+
+    feasible_objectives: List[
+        float
+    ] = []
+
+    # ==================================================================
+    # OPTIMALITY THRESHOLDS
+    # ==================================================================
+
+    if reference_objective is None:
+
+        exact_threshold = None
+        threshold_1pct = None
+        threshold_2pct = None
+        threshold_5pct = None
+        threshold_10pct = None
+
+    else:
+
+        reference = float(
+            reference_objective
+        )
+
+        exact_threshold = (
+            reference * (1.0 + tolerance)
+            + tolerance
+        )
+
+        threshold_1pct = (
+            reference * 1.01
+        )
+
+        threshold_2pct = (
+            reference * 1.02
+        )
+
+        threshold_5pct = (
+            reference * 1.05
+        )
+
+        threshold_10pct = (
+            reference * 1.10
+        )
+
+    # ==================================================================
+    # DECODE ALL UNIQUE STATES
+    # ==================================================================
+
+    # ==================================================================
+# DECODE ALL UNIQUE STATES
+# ==================================================================
+
+    for bitstring, shot_count in counts.items():
+
+        shots = int(shot_count)
+
+        solution = formulation.decode(
+        bitstring,
+        qiskit_order=True,
+        )
+
         if not solution.feasible:
             continue
+
         feasible_shots += shots
+
         objective = solution.objective
-        if objective is None:  # pragma: no cover - feasible implies an objective
+
+        if objective is None:
             continue
-        feasible_objectives.extend([float(objective)] * shots)
-        if best_objective is None or objective < best_objective:
-            best_objective = float(objective)
+
+        objective = float(objective)
+
+        feasible_objectives.extend(
+            [objective] * shots
+        )
+
+    # --------------------------------------------------------------
+    # Best feasible objective
+    # --------------------------------------------------------------
+
+        if (best_objective is None or objective < best_objective):
+            best_objective = objective
             best_solution = solution
-        if threshold is not None and objective <= threshold:
+
+    # --------------------------------------------------------------
+    # Exact optimum
+    # --------------------------------------------------------------
+
+        if (exact_threshold is not None and objective <= exact_threshold):
             optimal_shots += shots
+
+    # --------------------------------------------------------------
+    # Near-optimal states
+    # --------------------------------------------------------------
+
+        if (threshold_1pct is not None and objective <= threshold_1pct):
+            near_optimal_shots_1pct += shots
+
+        if (threshold_2pct is not None and objective <= threshold_2pct):
+            near_optimal_shots_2pct += shots
+
+        if (threshold_5pct is not None and objective <= threshold_5pct):
+            near_optimal_shots_5pct += shots
+
+        if (threshold_10pct is not None and objective <= threshold_10pct):
+            near_optimal_shots_10pct += shots
+
+    # ==================================================================
+    # MEAN QUBO ENERGY
+    # ==================================================================
+
+    mean_energy = float(
+        energies @ weights
+        / weights.sum()
+    )
 
     statistics = SampleStatistics(
         n_shots=n_shots,
         n_unique=len(counts),
         feasible_shots=feasible_shots,
         optimal_shots=optimal_shots,
-        mean_energy=float(energies @ weights / weights.sum()),
+        mean_energy=mean_energy,
         best_energy=best_energy,
         best_solution=best_solution,
         best_feasible_objective=best_objective,
-        feasible_objectives=tuple(feasible_objectives),
+        feasible_objectives=tuple(
+            feasible_objectives
+        ),
+        near_optimal_shots_1pct=(
+            near_optimal_shots_1pct
+        ),
+        near_optimal_shots_2pct=(
+            near_optimal_shots_2pct
+        ),
+        near_optimal_shots_5pct=(
+            near_optimal_shots_5pct
+        ),
+        near_optimal_shots_10pct=(
+            near_optimal_shots_10pct
+        ),
         metadata={
             "formulation": formulation.name,
             "reference_objective": reference_objective,
             "tolerance": tolerance,
         },
     )
-    _LOG.info("Distribution: %s", statistics.describe())
+
+    _LOG.info(
+        "Distribution: %s",
+        statistics.describe(),
+    )
+
     return statistics
 
 
-def feasibility_rate(counts: Mapping[str, int], formulation: Formulation) -> float:
-    """Shortcut for :attr:`SampleStatistics.feasibility_rate`."""
-    return analyse_counts(counts, formulation).feasibility_rate
+def feasibility_rate(
+    counts: Mapping[str, int],
+    formulation: Formulation,
+) -> float:
+    """Return the feasibility rate of the sampled distribution."""
+
+    return analyse_counts(
+        counts,
+        formulation,
+    ).feasibility_rate
 
 
 def success_probability(
@@ -274,62 +516,97 @@ def success_probability(
     *,
     tolerance: float = DEFAULT_TOLERANCE,
 ) -> float:
-    """Probability that a single shot lands on an optimal route."""
+    """Return probability of sampling an optimal solution."""
+
     statistics = analyse_counts(
-        counts, formulation, reference_objective=reference_objective, tolerance=tolerance
+        counts,
+        formulation,
+        reference_objective=reference_objective,
+        tolerance=tolerance,
     )
-    return statistics.success_probability or 0.0
+
+    return (
+        statistics.success_probability
+        or 0.0
+    )
 
 
-# ---------------------------------------------------------------------------
-# Timing
-# ---------------------------------------------------------------------------
+# ============================================================================
+# TIME TO SOLUTION
+# ============================================================================
+
 def time_to_solution(
-    seconds: float, success_prob: Optional[float], *, target: float = 0.99
+    seconds: float,
+    success_prob: Optional[float],
+    *,
+    target: float = 0.99,
 ) -> Optional[float]:
-    r"""Expected time to see an optimal sample with probability *target*.
-
-    .. math::
-
-        \mathrm{TTS} = t_{\text{run}} \cdot
-        \frac{\log(1 - \text{target})}{\log(1 - p_s)}
-
-    The standard figure of merit for stochastic optimisers, because it folds a
-    low success probability and a fast run into one comparable number: a sampler
-    that succeeds 1% of the time but runs 1000x faster genuinely is competitive.
-
-    Returns ``None`` when :math:`p_s = 0` (never succeeded, so the time is
-    unbounded) and *seconds* when :math:`p_s = 1`.
     """
-    if success_prob is None or success_prob <= 0.0:
+    Expected time to obtain an optimal sample with probability ``target``.
+
+    TTS = runtime * log(1-target) / log(1-success_probability)
+    """
+
+    if success_prob is None:
         return None
+
+    if success_prob <= 0.0:
+        return None
+
     if success_prob >= 1.0:
         return float(seconds)
-    repeats = np.log1p(-target) / np.log1p(-success_prob)
-    return float(seconds) * float(repeats)
+
+    if not 0.0 < target < 1.0:
+        raise QRouteError(
+            f"target must be between 0 and 1, got {target}"
+        )
+
+    repeats = (
+        np.log1p(-target)
+        / np.log1p(-success_prob)
+    )
+
+    return (
+        float(seconds)
+        * float(repeats)
+    )
 
 
-# ---------------------------------------------------------------------------
-# Side-by-side comparison
-# ---------------------------------------------------------------------------
+# ============================================================================
+# COMPARISON ROW
+# ============================================================================
+
 @dataclass(frozen=True)
 class ComparisonRow:
     """One solver's line in a comparison table."""
 
     solver: str
+
     objective: Optional[float]
+
     feasible: bool
+
     seconds: float
+
     optimal: bool = False
+
     approximation: Optional[float] = None
+
     gap_percent: Optional[float] = None
+
     success_prob: Optional[float] = None
+
     feasibility: Optional[float] = None
+
     tts: Optional[float] = None
+
     n_qubits: Optional[int] = None
+
     notes: str = ""
 
     def as_dict(self) -> Dict[str, Any]:
+        """Return a serialisable dictionary."""
+
         return {
             "solver": self.solver,
             "objective": self.objective,
@@ -346,145 +623,672 @@ class ComparisonRow:
         }
 
 
-def _reference_from(results: Sequence[ClassicalResult]) -> Tuple[Optional[float], bool]:
-    """Best available reference cost, and whether it is provably optimal.
+# ============================================================================
+# RESULT DETAILS HELPER
+# ============================================================================
 
-    Prefers an exact solver's answer. Falls back to the best heuristic cost, but
-    reports ``False`` so callers know an approximation ratio is off the table.
+def _result_note(
+    result: ClassicalResult,
+) -> str:
+    """Safely extract a result note."""
+
+    details = getattr(
+        result,
+        "details",
+        None,
+    )
+
+    if not isinstance(
+        details,
+        Mapping,
+    ):
+        return ""
+
+    return str(
+        details.get(
+            "note",
+            "",
+        )
+    )
+
+
+# ============================================================================
+# EXPLICIT REFERENCE
+# ============================================================================
+
+def _reference_values(
+    reference: Optional[ClassicalResult],
+) -> Tuple[
+    Optional[float],
+    bool,
+]:
     """
-    exact = [
-        result
-        for result in results
-        if result.optimal and result.feasible and result.objective is not None
-    ]
-    if exact:
-        return float(min(result.objective for result in exact)), True
-    feasible = [
-        result for result in results if result.feasible and result.objective is not None
-    ]
-    if feasible:
-        return float(min(result.objective for result in feasible)), False
-    return None, False
+    Extract the explicit reference objective.
 
+    Returns
+    -------
+    (objective, is_provably_optimal)
+    """
+
+    if reference is None:
+        return None, False
+
+    feasible = bool(
+        getattr(
+            reference,
+            "feasible",
+            False,
+        )
+    )
+
+    optimal = bool(
+        getattr(
+            reference,
+            "optimal",
+            False,
+        )
+    )
+
+    objective = getattr(
+        reference,
+        "objective",
+        None,
+    )
+
+    if (
+        not feasible
+        or objective is None
+    ):
+        return None, False
+
+    return (
+        float(objective),
+        optimal,
+    )
+
+
+# ============================================================================
+# SIDE-BY-SIDE COMPARISON
+# ============================================================================
 
 def compare_results(
     formulation: Formulation,
     classical: Sequence[ClassicalResult],
     quantum: Optional[QAOAResult] = None,
     *,
+    reference: Optional[ClassicalResult] = None,
     tolerance: float = DEFAULT_TOLERANCE,
     analyse_distribution: bool = True,
 ) -> List[ComparisonRow]:
-    """Build a comparison table from classical results and one QAOA run.
-
-    The reference cost is taken from the best *provably optimal* classical result
-    if there is one; otherwise ratios are left blank and only percentage gaps are
-    filled in. That distinction is the whole point of this function -- it makes it
-    structurally impossible to publish an approximation ratio computed against a
-    two-opt heuristic.
     """
-    reference, is_optimal = _reference_from(classical)
-    rows: List[ComparisonRow] = []
+    Compare QUBO classical baselines and QAOA against an explicit reference.
 
-    for result in classical:
-        objective = result.objective if result.feasible else None
+    Parameters
+    ----------
+    formulation:
+        QUBO formulation.
+
+    classical:
+        QUBO-level classical baselines only.
+
+        Examples:
+        - brute force QUBO
+        - simulated annealing
+
+        The original-problem reference should NOT be placed here.
+
+    quantum:
+        Optional QAOA result.
+
+    reference:
+        Explicit original-problem reference.
+
+        For shortest path this should normally be Dijkstra.
+
+    tolerance:
+        Tolerance used for exact-optimal sample classification.
+
+    analyse_distribution:
+        Analyse QAOA counts when available.
+
+    Returns
+    -------
+    list[ComparisonRow]
+        Comparison rows.
+    """
+
+    # ==================================================================
+    # EXPLICIT REFERENCE
+    # ==================================================================
+
+    reference_objective, reference_is_optimal = (
+        _reference_values(
+            reference
+        )
+    )
+
+    rows: List[
+        ComparisonRow
+    ] = []
+
+    # ==================================================================
+    # REFERENCE ROW
+    # ==================================================================
+
+    if reference_objective is not None:
+
+        reference_solver = getattr(
+            reference,
+            "solver",
+            "reference",
+        )
+
         rows.append(
             ComparisonRow(
-                solver=result.solver,
-                objective=objective,
-                feasible=result.feasible,
-                seconds=result.seconds,
-                optimal=result.optimal,
+                solver=str(
+                    reference_solver
+                ),
+                objective=reference_objective,
+                feasible=True,
+                seconds=float(
+                    getattr(
+                        reference,
+                        "seconds",
+                        0.0,
+                    )
+                ),
+                optimal=reference_is_optimal,
                 approximation=(
-                    approximation_ratio(objective, reference)
-                    if reference is not None and is_optimal
+                    1.0
+                    if reference_is_optimal
                     else None
                 ),
-                gap_percent=(
-                    optimality_gap(objective, reference) if reference is not None else None
+                gap_percent=0.0,
+                success_prob=(
+                    1.0
+                    if reference_is_optimal
+                    else None
                 ),
-                notes=str(result.details.get("note", "")),
+                feasibility=1.0,
+                tts=None,
+                n_qubits=None,
+                notes=(
+                    "original-problem reference"
+                    if reference_is_optimal
+                    else
+                    "reference is feasible but not "
+                    "provably optimal"
+                ),
             )
         )
 
+    # ==================================================================
+    # QUBO CLASSICAL BASELINES
+    # ==================================================================
+
+    for result in classical:
+
+        feasible = bool(
+            getattr(
+                result,
+                "feasible",
+                False,
+            )
+        )
+
+        objective = (
+            getattr(
+                result,
+                "objective",
+                None,
+            )
+            if feasible
+            else None
+        )
+
+        objective = (
+            float(objective)
+            if objective is not None
+            else None
+        )
+
+        result_optimal = bool(
+            getattr(
+                result,
+                "optimal",
+                False,
+            )
+        )
+
+        # --------------------------------------------------------------
+        # Approximation ratio
+        # --------------------------------------------------------------
+
+        if (
+            objective is not None
+            and reference_objective is not None
+            and reference_is_optimal
+        ):
+
+            approximation = approximation_ratio(
+                objective,
+                reference_objective,
+                reference_is_optimal=True,
+            )
+
+        else:
+
+            approximation = None
+
+        # --------------------------------------------------------------
+        # Gap
+        # --------------------------------------------------------------
+
+        if (
+            objective is not None
+            and reference_objective is not None
+        ):
+
+            gap = optimality_gap(
+                objective,
+                reference_objective,
+            )
+
+        else:
+
+            gap = None
+
+        rows.append(
+            ComparisonRow(
+                solver=str(
+                    getattr(
+                        result,
+                        "solver",
+                        "classical",
+                    )
+                ),
+                objective=objective,
+                feasible=feasible,
+                seconds=float(
+                    getattr(
+                        result,
+                        "seconds",
+                        0.0,
+                    )
+                ),
+                optimal=result_optimal,
+                approximation=approximation,
+                gap_percent=gap,
+                success_prob=None,
+                feasibility=(
+                    1.0
+                    if feasible
+                    else 0.0
+                ),
+                tts=None,
+                n_qubits=None,
+                notes=_result_note(
+                    result
+                ),
+            )
+        )
+
+    # ==================================================================
+    # QAOA
+    # ==================================================================
+
     if quantum is not None:
-        statistics: Optional[SampleStatistics] = None
-        if analyse_distribution and quantum.counts:
+
+        statistics: Optional[
+            SampleStatistics
+        ] = None
+
+        # --------------------------------------------------------------
+        # Distribution analysis
+        # --------------------------------------------------------------
+
+        if (
+            analyse_distribution
+            and getattr(
+                quantum,
+                "counts",
+                None,
+            )
+        ):
+
             try:
+
                 statistics = analyse_counts(
                     quantum.counts,
                     formulation,
-                    reference_objective=reference if is_optimal else None,
+                    reference_objective=(
+                        reference_objective
+                        if reference_is_optimal
+                        else None
+                    ),
                     tolerance=tolerance,
                 )
-            except QRouteError as exc:  # too many unique outcomes, most likely
-                _LOG.warning("Skipping distribution analysis: %s", exc)
 
-        objective = quantum.objective
-        if statistics is not None and statistics.best_feasible_objective is not None:
-            # The distribution may contain a feasible route better than the
-            # lowest-*energy* sample: penalties can make a slightly costlier
-            # valid route score below a cheap invalid one. Take the better.
-            if objective is None or statistics.best_feasible_objective < objective:
-                objective = statistics.best_feasible_objective
+            except QRouteError as exc:
 
-        success = statistics.success_probability if statistics is not None else None
+                _LOG.warning(
+                    "Skipping QAOA distribution analysis: %s",
+                    exc,
+                )
+
+        # --------------------------------------------------------------
+        # QAOA objective
+        # --------------------------------------------------------------
+
+        objective = getattr(
+            quantum,
+            "objective",
+            None,
+        )
+
+        if objective is not None:
+            objective = float(
+                objective
+            )
+
+        # The actual routing result should be the best feasible sampled
+        # route, not merely the variational mean energy.
+
+        if (
+            statistics is not None
+            and statistics.best_feasible_objective
+            is not None
+        ):
+
+            sampled_best = (
+                statistics.best_feasible_objective
+            )
+
+            if (
+                objective is None
+                or sampled_best < objective
+            ):
+
+                objective = sampled_best
+
+        # --------------------------------------------------------------
+        # QAOA feasibility
+        # --------------------------------------------------------------
+
+        qaoa_feasible = (
+            objective is not None
+        )
+
+        # --------------------------------------------------------------
+        # Approximation ratio
+        # --------------------------------------------------------------
+
+        if (
+            objective is not None
+            and reference_objective is not None
+            and reference_is_optimal
+        ):
+
+            approximation = approximation_ratio(
+                objective,
+                reference_objective,
+                reference_is_optimal=True,
+            )
+
+        else:
+
+            approximation = None
+
+        # --------------------------------------------------------------
+        # Gap
+        # --------------------------------------------------------------
+
+        if (
+            objective is not None
+            and reference_objective is not None
+        ):
+
+            gap = optimality_gap(
+                objective,
+                reference_objective,
+            )
+
+        else:
+
+            gap = None
+
+        # --------------------------------------------------------------
+        # Success probability
+        # --------------------------------------------------------------
+
+        success = (
+            statistics.success_probability
+            if statistics is not None
+            else None
+        )
+
+        # --------------------------------------------------------------
+        # Feasibility probability
+        # --------------------------------------------------------------
+
+        feasibility = (
+            statistics.feasibility_rate
+            if statistics is not None
+            else None
+        )
+
+        # --------------------------------------------------------------
+        # TTS
+        # --------------------------------------------------------------
+
+        tts = time_to_solution(
+            float(
+                getattr(
+                    quantum,
+                    "seconds",
+                    0.0,
+                )
+            ),
+            success,
+        )
+
+        # --------------------------------------------------------------
+        # Notes
+        # --------------------------------------------------------------
+
+        expectation_mode = getattr(
+            quantum,
+            "expectation_mode",
+            "shots",
+        )
+
+        if expectation_mode == "shots":
+
+            notes = (
+                "simulator wall-clock; "
+                "not a hardware timing claim"
+            )
+
+        else:
+
+            notes = (
+                "exact expectation; "
+                "no shot noise"
+            )
+
+        # --------------------------------------------------------------
+        # Row
+        # --------------------------------------------------------------
+
         rows.append(
             ComparisonRow(
-                solver=f"qaoa(p={quantum.reps},{quantum.expectation_mode})",
+                solver=(
+                    f"qaoa("
+                    f"p={getattr(quantum, 'reps', '?')},"
+                    f"{expectation_mode})"
+                ),
                 objective=objective,
-                feasible=objective is not None,
-                seconds=quantum.seconds,
-                optimal=False,
-                approximation=(
-                    approximation_ratio(objective, reference)
-                    if reference is not None and is_optimal
-                    else None
+                feasible=qaoa_feasible,
+                seconds=float(
+                    getattr(
+                        quantum,
+                        "seconds",
+                        0.0,
+                    )
                 ),
-                gap_percent=(
-                    optimality_gap(objective, reference) if reference is not None else None
-                ),
+                optimal=(
+                    reference_is_optimal
+                    and objective is not None
+                    and (
+                        abs(
+                            objective
+                            - reference_objective
+                        )
+                        <= (
+                            reference_objective
+                            * tolerance
+                            + tolerance
+                        )
+                    )
+                )
+                if reference_objective is not None
+                else False,
+                approximation=approximation,
+                gap_percent=gap,
                 success_prob=success,
-                feasibility=statistics.feasibility_rate if statistics is not None else None,
-                tts=time_to_solution(quantum.seconds, success),
-                n_qubits=quantum.n_qubits,
-                notes=(
-                    "simulator wall-clock; not a hardware timing claim"
-                    if quantum.expectation_mode == "shots"
-                    else "exact expectation, no shot noise"
+                feasibility=feasibility,
+                tts=tts,
+                n_qubits=getattr(
+                    quantum,
+                    "n_qubits",
+                    None,
                 ),
+                notes=notes,
             )
         )
 
-    if reference is not None and not is_optimal:
+    # ==================================================================
+    # WARN WHEN NO PROVABLE REFERENCE EXISTS
+    # ==================================================================
+
+    if (
+        reference_objective is not None
+        and not reference_is_optimal
+    ):
+
         _LOG.warning(
-            "No provably optimal classical result available, so approximation "
-            "ratios are omitted and gaps are measured against the best heuristic "
-            "(%.4g). Solve exactly if the instance is small enough.",
-            reference,
+            "Reference objective %.6g is not marked as provably optimal. "
+            "Approximation ratios are omitted.",
+            reference_objective,
         )
+
+    elif reference_objective is None:
+
+        _LOG.warning(
+            "No valid reference objective supplied. "
+            "Approximation ratios and reference gaps are unavailable."
+        )
+
     return rows
 
 
-def comparison_table(rows: Sequence[ComparisonRow], *, unit: str = "s") -> str:
-    """Render comparison rows as a fixed-width table for the console or a log."""
+# ============================================================================
+# COMPARISON TABLE
+# ============================================================================
+
+def comparison_table(
+    rows: Sequence[ComparisonRow],
+    *,
+    unit: str = "s",
+) -> str:
+    """
+    Render comparison rows as a fixed-width console table.
+    """
+
     header = (
-        f"{'solver':<28} {'cost (' + unit + ')':>14} {'ratio':>7} {'gap %':>8} "
-        f"{'p(opt)':>9} {'feas':>7} {'time (s)':>9}"
+        f"{'solver':<28} "
+        f"{'cost':>14} "
+        f"{'ratio':>8} "
+        f"{'gap %':>9} "
+        f"{'p(opt)':>10} "
+        f"{'feas':>8} "
+        f"{'time (s)':>10}"
     )
-    lines = [header, "-" * len(header)]
+
+    lines = [
+        header,
+        "-" * len(header),
+    ]
+
     for row in rows:
-        cost = "infeasible" if row.objective is None else f"{row.objective:,.2f}"
-        ratio = "-" if row.approximation is None else f"{row.approximation:.4f}"
-        gap = "-" if row.gap_percent is None else f"{row.gap_percent:+.2f}"
-        success = "-" if row.success_prob is None else f"{row.success_prob:.5f}"
-        feasible = "-" if row.feasibility is None else f"{row.feasibility:.3f}"
-        marker = "*" if row.optimal else " "
-        lines.append(
-            f"{row.solver + marker:<28} {cost:>14} {ratio:>7} {gap:>8} "
-            f"{success:>9} {feasible:>7} {row.seconds:>9.3f}"
+
+        cost = (
+            "infeasible"
+            if row.objective is None
+            else f"{row.objective:,.2f}"
         )
+
+        ratio = (
+            "-"
+            if row.approximation is None
+            else f"{row.approximation:.4f}"
+        )
+
+        gap = (
+            "-"
+            if row.gap_percent is None
+            else f"{row.gap_percent:+.2f}"
+        )
+
+        success = (
+            "-"
+            if row.success_prob is None
+            else f"{row.success_prob:.5f}"
+        )
+
+        feasible = (
+            "-"
+            if row.feasibility is None
+            else f"{row.feasibility:.3f}"
+        )
+
+        marker = (
+            "*"
+            if row.optimal
+            else ""
+        )
+
+        lines.append(
+            f"{row.solver + marker:<28} "
+            f"{cost:>14} "
+            f"{ratio:>8} "
+            f"{gap:>9} "
+            f"{success:>10} "
+            f"{feasible:>8} "
+            f"{row.seconds:>10.3f}"
+        )
+
     lines.append("")
-    lines.append("* = provably optimal, so a valid denominator for the ratio column.")
-    lines.append("ratio = optimum / achieved; 1.0000 is optimal, lower is worse.")
+
+    lines.append(
+        "* = provably optimal/reference-matched result."
+    )
+
+    lines.append(
+        "ratio = reference optimum / achieved objective."
+    )
+
+    lines.append(
+        "ratio = 1.0000 means the achieved objective matches "
+        "the optimal reference."
+    )
+
+    lines.append(
+        "p(opt) = probability of sampling an optimal solution."
+    )
+
+    lines.append(
+        "feas = fraction of all QAOA shots producing feasible solutions."
+    )
+
     return "\n".join(lines)
